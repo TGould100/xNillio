@@ -123,18 +123,6 @@ Or use the script with download URL:
 python -m app.data.process_gcide --download-url "https://example.com/gcide-0.54.zip"
 ```
 
-## API Endpoints
-
-### Words
-- `GET /api/words/{word}` - Get definition and linked words
-- `GET /api/words/{word}/neighbors` - Get graph neighborhood
-- `GET /api/words/search/{query}` - Search for words
-
-### Statistics
-- `GET /api/stats/overview` - Basic dictionary statistics
-- `GET /api/stats/graph` - Detailed graph statistics
-- `GET /api/stats/top-words` - Words with highest degree
-- `GET /api/stats/cycles` - Circular definition dependencies
 
 ## Project Structure
 
@@ -159,13 +147,6 @@ xNillio/
 └── requirements.txt        # Python dependencies
 ```
 
-## Performance Optimizations
-
-- **Database Indexing**: Indexed word lookups for O(log n) search
-- **Async Operations**: Non-blocking database queries
-- **Graph Caching**: Graph structure cached after first build
-- **Efficient Word Extraction**: Optimized regex and batch database checks
-
 ## Cloud Deployment
 
 The application is designed for easy cloud deployment:
@@ -182,51 +163,3 @@ Example for AWS/GCP/Azure:
 - Connect to managed database service
 - Use load balancer for API
 - CDN for frontend static assets
-
-## Development
-
-### Running Tests
-```bash
-# Backend tests (if implemented)
-pytest
-
-# Frontend tests (if implemented)
-cd client && npm test
-```
-
-### Code Style
-- Python: Follows PEP 8, uses flake8
-- JavaScript: Standard React/ES6 conventions
-
-## License
-
-This project is a technical assessment. The GCIDE dictionary is GNU GPL licensed.
-
-## Evaluation Notes
-
-This implementation addresses all P0 and P1 requirements:
-
-**P0 - Speed of Execution**:
-- Optimized database queries with indexes
-- Async/await throughout for non-blocking operations
-- Efficient word extraction and linking
-- Graph caching to avoid recomputation
-
-**P0 - Product Sense**:
-- Intuitive search interface
-- Clear visual feedback for clickable words
-- Statistics panel for engagement
-- Breadcrumb-style navigation through word relationships
-
-**P1 - Deployment Sensibilities**:
-- Modular Docker containerization
-- Environment-based configuration
-- Health check endpoints
-- Separation of concerns (API/client/database)
-
-**P2 - Graph Statistics**:
-- Comprehensive graph metrics (degree, centrality, cycles)
-- Interactive statistics panel
-- Top words by connectivity
-- Circular dependency detection
-
