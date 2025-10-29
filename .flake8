@@ -1,0 +1,6 @@
+[flake8]
+ignore = D203, E501, E128, E124, E125, W504, C901, W503, E203
+exclude = .git,__pycache__,docs/source/conf.py,old,build,dist,__tests__,payloads,dist, builtins.pyi, experimental, __init__.py
+filename = *.py
+max-complexity = 10
+inline-quotes = "+

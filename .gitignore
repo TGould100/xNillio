@@ -1,0 +1,70 @@
+.DS_Store
+.jukit/
+.idea/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/ L
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environments
+*.env
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Data
+*.csv
+*.rest
+*.data
+benchmark/*.pkl
+data/gcide_raw/*
+!data/gcide_raw/.gitkeep
+data/downloads/*
+!data/downloads/.gitkeep
+data/*.db
+data/*.zip
+
+.aws-sam
+.local
+config/dev.env-e
+config/**.json
+config/**.txt
+
+dependency layers
+dependencies*/
+dask-worker-space/
+

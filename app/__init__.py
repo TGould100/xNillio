@@ -1,0 +1,1 @@
+# GCIDE Dictionary Explorer

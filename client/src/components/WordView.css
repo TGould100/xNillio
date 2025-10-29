@@ -1,0 +1,159 @@
+.word-view {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.word-view.loading,
+.word-view.error {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.word-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.word-title-container {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.word-title {
+  font-size: 2.5rem;
+  color: #333;
+  margin: 0;
+}
+
+.pronunciation {
+  font-size: 1.2rem;
+  color: #666;
+  font-style: italic;
+  font-weight: normal;
+}
+
+.linked-words-count {
+  background: #667eea;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.definition-container {
+  margin-bottom: 2rem;
+}
+
+.definition {
+  font-size: 1.2rem;
+  line-height: 1.8;
+  color: #444;
+  white-space: pre-wrap;
+}
+
+.word-link {
+  background: none;
+  border: none;
+  color: #667eea;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+  margin: 0;
+  display: inline;
+  transition: color 0.2s;
+}
+
+.word-link:hover {
+  color: #5568d3;
+  text-decoration: underline;
+}
+
+.word-link:active {
+  color: #4a5bc0;
+}
+
+.linked-words-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 2px solid #f0f0f0;
+}
+
+.linked-words-section h3 {
+  margin-bottom: 1rem;
+  color: #667eea;
+  font-size: 1.3rem;
+}
+
+.linked-words-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.linked-word-tag {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.linked-word-tag:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.error h2 {
+  color: #e74c3c;
+  margin-bottom: 1rem;
+}
+
+.error p {
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .word-title {
+    font-size: 1.8rem;
+  }
+  
+  .definition {
+    font-size: 1rem;
+  }
+  
+  .word-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}
+

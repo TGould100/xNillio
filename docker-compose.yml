@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-gcide}
+      POSTGRES_USER: ${DB_USER:-xnillio}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-xnillio}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    # Note: Database volume persists across rebuilds
+    # To reset: docker volume rm xnillio_postgres_data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-xnillio} -d ${DB_NAME:-gcide}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - GCIDE_URL=${GCIDE_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  client:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    environment:
+      - REACT_APP_API_URL=http://api:8000
+
+volumes:
+  postgres_data:
+
