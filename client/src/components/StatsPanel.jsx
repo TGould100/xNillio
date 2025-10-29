@@ -39,6 +39,12 @@ function StatsPanel({ stats, loading }) {
                 <span className="stat-label">Avg Definition Length:</span>
                 <span className="stat-value">{stats.average_definition_length || 'N/A'}</span>
               </div>
+              {stats.average_degree_centrality !== undefined && (
+                <div className="stat-item">
+                  <span className="stat-label">Avg Degree Centrality:</span>
+                  <span className="stat-value">{stats.average_degree_centrality.toFixed(2)}</span>
+                </div>
+              )}
             </div>
           )}
           

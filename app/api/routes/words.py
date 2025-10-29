@@ -27,6 +27,10 @@ async def get_word(word: str):
         "definition": definition_data["definition"],
         "linked_words": linked_words,
         "word_id": definition_data.get("id"),
+        "degree_centrality": definition_data.get("degree_centrality", 0),
+        "in_degree": definition_data.get("in_degree", 0),
+        "out_degree": definition_data.get("out_degree", 0),
+        "in_out_ratio": definition_data.get("in_out_ratio", 0),
     }
 
 

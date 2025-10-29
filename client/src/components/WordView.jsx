@@ -152,11 +152,27 @@ function WordView({ word, onWordClick }) {
             <span className="pronunciation">/{data.pronunciation}/</span>
           )}
         </div>
-        {data.linked_words && data.linked_words.length > 0 && (
-          <div className="linked-words-count">
-            {data.linked_words.length} linked word{data.linked_words.length !== 1 ? 's' : ''}
-          </div>
-        )}
+        <div className="word-metrics">
+          {data.degree_centrality !== undefined && data.degree_centrality !== null && (
+            <div className="degree-centrality-badge" title="Degree Centrality: Total number of connections (outgoing + incoming links)">
+              <span className="metric-label">Centrality</span>
+              <span className="metric-value">{data.degree_centrality}</span>
+            </div>
+          )}
+          {data.in_out_ratio !== undefined && data.in_out_ratio !== null && (
+            <div className="ratio-badge" title={`In/Out Ratio (R): Ratio of incoming links to outgoing links. R = ${data.in_degree || 0}/${data.out_degree || 0}`}>
+              <span className="metric-label">R</span>
+              <span className="metric-value">
+                {data.in_out_ratio === Infinity ? '∞' : data.in_out_ratio === 0 ? '0' : data.in_out_ratio}
+              </span>
+            </div>
+          )}
+          {data.linked_words && data.linked_words.length > 0 && (
+            <div className="linked-words-count">
+              {data.linked_words.length} linked word{data.linked_words.length !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="definition-container">

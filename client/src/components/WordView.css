@@ -55,6 +55,13 @@
   font-weight: normal;
 }
 
+.word-metrics {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .linked-words-count {
   background: #667eea;
   color: white;
@@ -62,6 +69,52 @@
   border-radius: 20px;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.degree-centrality-badge {
+  background: #48bb78;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: help;
+}
+
+.degree-centrality-badge .metric-label {
+  opacity: 0.9;
+  font-size: 0.85rem;
+}
+
+.degree-centrality-badge .metric-value {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.ratio-badge {
+  background: #ed8936;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: help;
+}
+
+.ratio-badge .metric-label {
+  opacity: 0.9;
+  font-size: 0.85rem;
+}
+
+.ratio-badge .metric-value {
+  font-weight: 700;
+  font-size: 1rem;
 }
 
 .definition-container {
@@ -198,15 +251,27 @@
   .word-title {
     font-size: 1.8rem;
   }
-  
+
   .definition {
     font-size: 1rem;
   }
-  
+
   .word-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
+  }
+
+  .word-metrics {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .degree-centrality-badge,
+  .ratio-badge,
+  .linked-words-count {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.85rem;
   }
 }
 

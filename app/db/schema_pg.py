@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS words (
     pronunciation TEXT,
     definition TEXT NOT NULL,
     definition_length INTEGER,
+    degree_centrality INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT words_word_unique UNIQUE (word)

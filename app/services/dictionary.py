@@ -19,6 +19,8 @@ class DictionaryService:
             "password": os.getenv("DB_PASSWORD", ""),
         }
         self._pool = None
+        self._compound_word_cache: Optional[Dict[str, str]] = None
+        self._all_words_cache: Optional[Set[str]] = None
 
     async def _get_pool(self):
         """Get or create database connection pool."""
@@ -34,20 +36,102 @@ class DictionaryService:
             )
         return self._pool
 
+    async def _build_compound_cache(self) -> Dict[str, str]:
+        """
+        Build in-memory cache of compound words (multi-word entries).
+        Maps normalized phrase -> actual word_lower from database.
+        Lazy-loaded on first use.
+        """
+        if self._compound_word_cache is not None:
+            return self._compound_word_cache
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # Get all multi-word entries (with spaces or hyphens)
+            rows = await conn.fetch(
+                "SELECT word_lower FROM words WHERE word_lower ~ '[\\s\\-]'"
+            )
+
+            compound_cache: Dict[str, str] = {}
+
+            for row in rows:
+                word_lower = row["word_lower"]
+                # Normalize: lowercase, replace hyphens with spaces, normalize whitespace
+                normalized = re.sub(r"[-\s]+", " ", word_lower.strip()).lower()
+                word_count = len(normalized.split())
+
+                # Only cache multi-word entries (2-5 words)
+                if word_count >= 2 and word_count <= 5:
+                    # Store both the normalized version and the actual word_lower
+                    if normalized not in compound_cache:
+                        compound_cache[normalized] = word_lower
+                    # Also cache hyphenated version if different
+                    hyphenated = normalized.replace(" ", "-")
+                    if hyphenated != normalized and hyphenated not in compound_cache:
+                        compound_cache[hyphenated] = word_lower
+
+            self._compound_word_cache = compound_cache
+            return compound_cache
+
+    async def _build_all_words_cache(self) -> Set[str]:
+        """
+        Build in-memory cache of all word_lower values for fast lookup.
+        Lazy-loaded on first use.
+        """
+        if self._all_words_cache is not None:
+            return self._all_words_cache
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("SELECT word_lower FROM words")
+            self._all_words_cache = {row["word_lower"] for row in rows}
+            return self._all_words_cache
+
     async def get_definition(self, word: str) -> Optional[Dict]:
         """Get definition for a word."""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT id, word, pronunciation, definition FROM words WHERE word_lower = $1",
+                "SELECT id, word, pronunciation, definition, degree_centrality FROM words WHERE word_lower = $1",
                 word.lower(),
             )
             if row:
+                word_id = row["id"]
+
+                # Get in-degree (number of words that link to this word)
+                in_degree = (
+                    await conn.fetchval(
+                        "SELECT COUNT(*) FROM word_links WHERE target_word_id = $1",
+                        word_id,
+                    )
+                    or 0
+                )
+
+                # Get out-degree (number of words this word links to)
+                out_degree = (
+                    await conn.fetchval(
+                        "SELECT COUNT(*) FROM word_links WHERE source_word_id = $1",
+                        word_id,
+                    )
+                    or 0
+                )
+
+                # Calculate in/out ratio (R)
+                # If out_degree is 0, ratio is undefined/infinite, so we use a special value
+                if out_degree == 0:
+                    in_out_ratio = float("inf") if in_degree > 0 else 0
+                else:
+                    in_out_ratio = round(in_degree / out_degree, 2)
+
                 return {
-                    "id": row["id"],
+                    "id": word_id,
                     "word": row["word"],
                     "pronunciation": row.get("pronunciation"),
                     "definition": row["definition"],
+                    "degree_centrality": row.get("degree_centrality", 0),
+                    "in_degree": in_degree,
+                    "out_degree": out_degree,
+                    "in_out_ratio": in_out_ratio,
                 }
         return None
 
@@ -60,41 +144,39 @@ class DictionaryService:
             )
             return row is not None
 
-    async def _find_compound_variations(
-        self, phrase: str, conn: asyncpg.Connection
-    ) -> Optional[str]:
+    async def _find_compound_variations(self, phrase: str) -> Optional[str]:
         """
         Check if a phrase exists in dictionary in any variation (spaces, hyphens).
         Returns the actual word_lower from dictionary if found, None otherwise.
+        Uses in-memory cache for fast lookup - no database queries!
 
         Tries: "mother in law" -> checks for "mother-in-law", "mother in law", etc.
         """
         # Normalize: lowercase, normalize whitespace
         normalized = re.sub(r"\s+", " ", phrase.strip().lower())
 
-        # Try exact match first
-        row = await conn.fetchrow(
-            "SELECT word_lower FROM words WHERE word_lower = $1 LIMIT 1", normalized
-        )
-        if row:
-            return row["word_lower"]
+        # Get compound cache (lazy-loaded)
+        compound_cache = await self._build_compound_cache()
+
+        # Try exact match in cache
+        if normalized in compound_cache:
+            return compound_cache[normalized]
 
         # Try with hyphens instead of spaces
         hyphenated = normalized.replace(" ", "-")
-        row = await conn.fetchrow(
-            "SELECT word_lower FROM words WHERE word_lower = $1 LIMIT 1", hyphenated
-        )
-        if row:
-            return row["word_lower"]
+        if hyphenated in compound_cache:
+            return compound_cache[hyphenated]
 
-        # Try regex match for flexible spacing/hyphenation
-        # This handles cases like "mother-in-law" in DB vs "mother in law" in text
-        pattern = re.escape(normalized).replace(r"\ ", r"[\\s\\-]+")
-        rows = await conn.fetch(
-            "SELECT word_lower FROM words WHERE word_lower ~ $1 LIMIT 1", f"^{pattern}$"
-        )
-        if rows:
-            return rows[0]["word_lower"]
+        # For flexible matching, check cache entries that match the pattern
+        # Build pattern for flexible matching
+        words = normalized.split()
+        if len(words) >= 2:
+            # Try to match any compound that has the same words in order
+            # This handles "mother in law" matching "mother-in-law"
+            for cached_phrase, cached_word in compound_cache.items():
+                cached_normalized = re.sub(r"[-\s]+", " ", cached_phrase).lower()
+                if cached_normalized.split() == words:
+                    return cached_word
 
         return None
 
@@ -173,70 +255,65 @@ class DictionaryService:
         # This prevents extracting individual words from within compounds
         covered_positions: Set[int] = set()
 
-        pool = await self._get_pool()
-        async with pool.acquire() as conn:
-            # Extract all potential n-grams (2-5 words) and check if they exist as compounds
-            # Start with longest phrases first (greedy matching)
-            words_list = re.findall(r"\b[a-zA-Z]+\b", definition_lower)
-            word_positions: List[Tuple[int, int, str]] = []
+        # Extract all potential n-grams (2-5 words) and check if they exist as compounds
+        # Start with longest phrases first (greedy matching)
+        words_list = re.findall(r"\b[a-zA-Z]+\b", definition_lower)
+        word_positions: List[Tuple[int, int, str]] = []
 
-            # Build mapping of word start positions
-            for match in re.finditer(r"\b[a-zA-Z]+\b", definition_lower):
-                word_positions.append((match.start(), match.end(), match.group()))
+        # Build mapping of word start positions
+        for match in re.finditer(r"\b[a-zA-Z]+\b", definition_lower):
+            word_positions.append((match.start(), match.end(), match.group()))
 
-            # Try to find compound phrases (2-5 words)
-            # Start from each position and try phrases of increasing length
-            for start_idx in range(len(words_list)):
-                for phrase_length in range(5, 1, -1):  # Try 5 words, then 4, 3, 2
-                    end_idx = start_idx + phrase_length
-                    if end_idx > len(words_list):
-                        continue
+        # Try to find compound phrases (2-5 words)
+        # Start from each position and try phrases of increasing length
+        for start_idx in range(len(words_list)):
+            for phrase_length in range(5, 1, -1):  # Try 5 words, then 4, 3, 2
+                end_idx = start_idx + phrase_length
+                if end_idx > len(words_list):
+                    continue
 
-                    # Check if any words in this phrase are already covered
-                    phrase_start_pos = word_positions[start_idx][0]
-                    phrase_end_pos = word_positions[end_idx - 1][1]
+                # Check if any words in this phrase are already covered
+                phrase_start_pos = word_positions[start_idx][0]
+                phrase_end_pos = word_positions[end_idx - 1][1]
 
-                    if any(
-                        pos in covered_positions
-                        for pos in range(phrase_start_pos, phrase_end_pos)
-                    ):
-                        continue  # Skip if already covered by a compound
-
-                    # Build phrase from words
-                    phrase = " ".join(words_list[start_idx:end_idx])
-
-                    # Check if this phrase exists in dictionary
-                    compound_word = await self._find_compound_variations(phrase, conn)
-
-                    if compound_word:
-                        # Found a compound - add it and mark positions as covered
-                        found_words.add(compound_word)
-                        # Mark all character positions in this phrase as covered
-                        for pos in range(phrase_start_pos, phrase_end_pos):
-                            covered_positions.add(pos)
-                        break  # Stop trying shorter phrases from this position
-
-            # Now extract individual words only from uncovered positions
-            for start_pos, end_pos, word in word_positions:
-                # Check if this word is covered by a compound
-                if any(pos in covered_positions for pos in range(start_pos, end_pos)):
-                    continue  # Skip words that are part of compounds
-
-                word_lower = word.lower()
-                # Filter: not stop word, not source word, minimum length
-                if (
-                    word_lower not in stop_words
-                    and word_lower != source_word.lower()
-                    and len(word_lower) > 2
+                if any(
+                    pos in covered_positions
+                    for pos in range(phrase_start_pos, phrase_end_pos)
                 ):
+                    continue  # Skip if already covered by a compound
 
-                    # Check if word exists in dictionary
-                    row = await conn.fetchrow(
-                        "SELECT word_lower FROM words WHERE word_lower = $1 LIMIT 1",
-                        word_lower,
-                    )
-                    if row:
-                        found_words.add(row["word_lower"])
+                # Build phrase from words
+                phrase = " ".join(words_list[start_idx:end_idx])
+
+                # Check if this phrase exists in dictionary (using cache - no DB query!)
+                compound_word = await self._find_compound_variations(phrase)
+
+                if compound_word:
+                    # Found a compound - add it and mark positions as covered
+                    found_words.add(compound_word)
+                    # Mark all character positions in this phrase as covered
+                    for pos in range(phrase_start_pos, phrase_end_pos):
+                        covered_positions.add(pos)
+                    break  # Stop trying shorter phrases from this position
+
+        # Get all words cache for fast lookup
+        all_words = await self._build_all_words_cache()
+
+        # Now extract individual words only from uncovered positions
+        for start_pos, end_pos, word in word_positions:
+            # Check if this word is covered by a compound
+            if any(pos in covered_positions for pos in range(start_pos, end_pos)):
+                continue  # Skip words that are part of compounds
+
+            word_lower = word.lower()
+            # Filter: not stop word, not source word, minimum length
+            if (
+                word_lower not in stop_words
+                and word_lower != source_word.lower()
+                and len(word_lower) > 2
+                and word_lower in all_words
+            ):
+                found_words.add(word_lower)
 
         return sorted(found_words)
 

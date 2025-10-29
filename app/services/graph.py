@@ -1,67 +1,101 @@
-import aiosqlite
+import os
 from typing import Dict, List, Optional
-from pathlib import Path
+from dotenv import load_dotenv
+import asyncpg
 import networkx as nx
+
+load_dotenv()
 
 
 class GraphService:
     """Service for computing graph statistics on the dictionary."""
 
-    def __init__(self, db_path: Optional[str] = None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent.parent / "data" / "gcide.db"
-        else:
-            self.db_path = Path(db_path)
-
+    def __init__(self):
+        self.db_config = {
+            "host": os.getenv("DB_HOST", "localhost"),
+            "port": int(os.getenv("DB_PORT", "5432")),
+            "database": os.getenv("DB_NAME", "gcide"),
+            "user": os.getenv("DB_USER", "xnillio"),
+            "password": os.getenv("DB_PASSWORD", ""),
+        }
+        self._pool = None
         self._graph_cache: Optional[nx.DiGraph] = None
+
+    async def _get_pool(self):
+        """Get or create database connection pool."""
+        if self._pool is None:
+            self._pool = await asyncpg.create_pool(
+                host=self.db_config["host"],
+                port=self.db_config["port"],
+                database=self.db_config["database"],
+                user=self.db_config["user"],
+                password=self.db_config["password"],
+                min_size=2,
+                max_size=10,
+            )
+        return self._pool
 
     async def _build_graph(self) -> nx.DiGraph:
         """Build NetworkX graph from dictionary relationships."""
         if self._graph_cache is not None:
             return self._graph_cache
 
-        from app.services.dictionary import DictionaryService
-
-        dict_service = DictionaryService(str(self.db_path))
-
         G = nx.DiGraph()
 
-        # Get all words
-        async with aiosqlite.connect(str(self.db_path)) as db:
-            async with db.execute("SELECT word, definition FROM words") as cursor:
-                async for row in cursor:
-                    word = row[0].lower()
-                    definition = row[1]
+        # Get all words and their links from word_links table
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            # Get all words
+            words_rows = await conn.fetch("SELECT id, word_lower FROM words")
 
-                    # Add node
-                    G.add_node(word)
+            # Build word_id -> word_lower mapping
+            word_id_map = {row["id"]: row["word_lower"] for row in words_rows}
 
-                    # Extract linked words and add edges
-                    linked_words = await dict_service.extract_linked_words(
-                        word, definition
-                    )
-                    for linked_word in linked_words:
-                        G.add_edge(word, linked_word)
+            # Add all nodes
+            for word_lower in word_id_map.values():
+                G.add_node(word_lower)
+
+            # Get all links
+            links_rows = await conn.fetch(
+                "SELECT source_word_id, target_word_id FROM word_links"
+            )
+
+            # Add edges
+            for link in links_rows:
+                source = word_id_map.get(link["source_word_id"])
+                target = word_id_map.get(link["target_word_id"])
+                if source and target:
+                    G.add_edge(source, target)
 
         self._graph_cache = G
         return G
 
     async def get_overview_stats(self) -> Dict:
         """Get basic dictionary statistics."""
-        async with aiosqlite.connect(str(self.db_path)) as db:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
             # Total words
-            async with db.execute("SELECT COUNT(*) FROM words") as cursor:
-                total_words = (await cursor.fetchone())[0]
+            total_words = await conn.fetchval("SELECT COUNT(*) FROM words")
 
             # Average definition length
-            async with db.execute(
-                "SELECT AVG(LENGTH(definition)) FROM words"
-            ) as cursor:
-                avg_length = (await cursor.fetchone())[0] or 0
+            avg_length = (
+                await conn.fetchval("SELECT AVG(definition_length) FROM words")
+                or await conn.fetchval("SELECT AVG(LENGTH(definition)) FROM words")
+                or 0
+            )
+
+            # Average degree centrality
+            avg_degree = (
+                await conn.fetchval(
+                    "SELECT AVG(degree_centrality) FROM words WHERE degree_centrality > 0"
+                )
+                or 0
+            )
 
         return {
             "total_words": total_words,
             "average_definition_length": round(avg_length, 2),
+            "average_degree_centrality": round(avg_degree, 2),
         }
 
     async def get_graph_statistics(self) -> Dict:

@@ -471,6 +471,14 @@ def create_database():
         except Exception:
             pass  # Column may already exist
 
+        # Add degree_centrality column if it doesn't exist (migration for existing databases)
+        try:
+            cursor.execute(
+                "ALTER TABLE words ADD COLUMN IF NOT EXISTS degree_centrality INTEGER DEFAULT 0"
+            )
+        except Exception:
+            pass  # Column may already exist
+
         conn.commit()
 
     print(

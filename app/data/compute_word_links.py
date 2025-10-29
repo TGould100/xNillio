@@ -327,9 +327,69 @@ def compute_word_links(batch_size: int = 10000):
         cursor.execute("SELECT COUNT(*) FROM word_links")
         total_links = cursor.fetchone()[0]
 
+        # Compute degree centrality for all words
+        print("\nComputing degree centrality...")
+        compute_degree_centrality(cursor, conn)
+
     print(f"\nCompleted! Created {total_links} word links from {processed} words")
     print(f"  Compound phrase matches: {compound_matches}")
     print(f"  Individual word matches: {individual_matches}")
+
+
+def compute_degree_centrality(cursor, conn):
+    """
+    Compute degree centrality for all words.
+    Degree centrality = outgoing links + incoming links
+    """
+    # First, ensure the column exists (migration for existing databases)
+    try:
+        cursor.execute(
+            "ALTER TABLE words ADD COLUMN IF NOT EXISTS degree_centrality INTEGER DEFAULT 0"
+        )
+        conn.commit()
+    except Exception:
+        pass  # Column may already exist
+
+    # Initialize all to 0
+    cursor.execute("UPDATE words SET degree_centrality = 0")
+    conn.commit()
+
+    # Count outgoing links (words that this word links to)
+    cursor.execute(
+        """
+        UPDATE words w
+        SET degree_centrality = (
+            SELECT COUNT(*)
+            FROM word_links wl
+            WHERE wl.source_word_id = w.id
+        )
+    """
+    )
+    conn.commit()
+
+    # Add incoming links (words that link to this word)
+    cursor.execute(
+        """
+        UPDATE words w
+        SET degree_centrality = degree_centrality + (
+            SELECT COUNT(*)
+            FROM word_links wl
+            WHERE wl.target_word_id = w.id
+        )
+    """
+    )
+    conn.commit()
+
+    # Get statistics
+    cursor.execute("SELECT MAX(degree_centrality), AVG(degree_centrality) FROM words")
+    max_degree, avg_degree = cursor.fetchone()
+
+    cursor.execute("SELECT COUNT(*) FROM words WHERE degree_centrality > 0")
+    connected_words = cursor.fetchone()[0]
+
+    print(f"  Max degree centrality: {max_degree or 0}")
+    print(f"  Average degree centrality: {avg_degree:.2f if avg_degree else 0:.2f}")
+    print(f"  Connected words: {connected_words}")
 
 
 if __name__ == "__main__":
@@ -342,7 +402,18 @@ if __name__ == "__main__":
         default=10000,
         help="Batch size for inserts",
     )
+    parser.add_argument(
+        "--only-centrality",
+        action="store_true",
+        help="Only compute degree centrality (skip link computation)",
+    )
 
     args = parser.parse_args()
 
-    compute_word_links(batch_size=args.batch_size)
+    if args.only_centrality:
+        print("Computing degree centrality only...")
+        with get_db_connection_sync() as conn:
+            cursor = conn.cursor()
+            compute_degree_centrality(cursor, conn)
+    else:
+        compute_word_links(batch_size=args.batch_size)
