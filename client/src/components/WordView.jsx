@@ -6,6 +6,7 @@ function WordView({ word, onWordClick }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isDefinitionExpanded, setIsDefinitionExpanded] = useState(true)
 
   useEffect(() => {
     setLoading(true)
@@ -159,8 +160,20 @@ function WordView({ word, onWordClick }) {
       </div>
       
       <div className="definition-container">
-        <div className="definition">
-          {renderDefinition(data.definition, data.linked_words || [])}
+        <button
+          className="definition-toggle"
+          onClick={() => setIsDefinitionExpanded(!isDefinitionExpanded)}
+          aria-expanded={isDefinitionExpanded}
+        >
+          <span className="definition-toggle-text">Definition</span>
+          <span className={`definition-toggle-icon ${isDefinitionExpanded ? 'expanded' : ''}`}>
+            ▼
+          </span>
+        </button>
+        <div className={`definition-content ${isDefinitionExpanded ? 'expanded' : 'collapsed'}`}>
+          <div className="definition">
+            {renderDefinition(data.definition, data.linked_words || [])}
+          </div>
         </div>
       </div>
       

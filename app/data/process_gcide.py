@@ -293,6 +293,7 @@ def parse_gcide_html(gcide_file: Path) -> List[Dict[str, str]]:
     GCIDE format uses HTML-like tags. Entries can be:
     1. <p><ent>word</ent>...content...</p> (standard entries)
     2. Multiple <ent> tags within one <p> (nested/sub-entries)
+    3. Multi-paragraph entries: <p><ent>word</ent>...</p> followed by <p><sn>...</p> paragraphs
     """
     entries = []
 
@@ -300,73 +301,40 @@ def parse_gcide_html(gcide_file: Path) -> List[Dict[str, str]]:
         with open(gcide_file, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
-        # First, extract all paragraph blocks that contain entries
-        # Match <p>...</p> blocks - be careful with nested tags
-        # Use a stateful approach: find <p> tags and match to nearest </p>
-        paragraphs = []
-        i = 0
-        while i < len(content):
-            # Find next <p> tag
-            p_start = content.find("<p>", i)
-            if p_start == -1:
-                break
+        # Find all entry positions (<ent> tags) first
+        ent_pattern = r"<p><ent>([^<]+)</ent>"
+        ent_positions = []
+        for match in re.finditer(ent_pattern, content):
+            entry_word = match.group(1).strip()
+            entry_start = match.start()
+            ent_positions.append((entry_start, entry_word))
 
-            # Find matching </p> tag (accounting for nested <p> tags)
-            depth = 1
-            j = p_start + 3
-            p_end = -1
-            while j < len(content) and depth > 0:
-                if content[j : j + 3] == "<p>":
-                    depth += 1
-                    j += 3
-                elif content[j : j + 4] == "</p>":
-                    depth -= 1
-                    if depth == 0:
-                        p_end = j
-                        break
-                    j += 4
-                else:
-                    j += 1
-
-            if p_end > 0:
-                para_content = content[p_start + 3 : p_end]  # Exclude <p> and </p>
-                paragraphs.append((p_start, p_end + 4, para_content))
-                i = p_end + 4
+        # For each entry, collect all paragraphs until the next entry
+        for idx, (entry_start, entry_word) in enumerate(ent_positions):
+            # Find the end of this entry's content (start of next entry or end of file)
+            if idx + 1 < len(ent_positions):
+                next_entry_start = ent_positions[idx + 1][0]
+                entry_section = content[entry_start:next_entry_start]
             else:
-                i = p_start + 3
+                entry_section = content[entry_start:]
 
-        for para_start, para_end, para_content in paragraphs:
+            # Extract all paragraphs that belong to this entry
+            # The entry starts with <p><ent>word</ent> and includes subsequent
+            # paragraphs until we hit the next <p><ent> tag
 
-            # Find all <ent> tags in this paragraph (some paragraphs have multiple entries)
-            ent_matches = list(re.finditer(r"<ent>([^<]+)</ent>", para_content))
-
-            if not ent_matches:
+            # Find the <ent> tag end position within this section
+            ent_tag_match = re.search(r"<ent>[^<]+</ent>", entry_section)
+            if not ent_tag_match:
                 continue
 
-            # Find where the last entry tag ends - shared content is after all entry tags
-            last_entry_end = ent_matches[-1].end()
-            shared_content = para_content[last_entry_end:]
+            entry_content_start = ent_tag_match.end()
+            # Get content from after <ent> tag, excluding any trailing whitespace/newlines
+            entry_content = entry_section[entry_content_start:].strip()
 
-            # For each entry in the paragraph, extract its content
-            for i, ent_match in enumerate(ent_matches):
-                entry_word = ent_match.group(1).strip()
-                entry_start = ent_match.end()
-
-                # Content for this entry: from <ent> to next <ent> (if any), plus shared content
-                if i + 1 < len(ent_matches):
-                    # There's another entry, content goes until next <ent>
-                    next_entry_start = ent_matches[i + 1].start()
-                    entry_specific_content = para_content[entry_start:next_entry_start]
-                    # Combine entry-specific content with shared content
-                    entry_content = entry_specific_content + shared_content
-                else:
-                    # Last entry in paragraph: content from its <ent> tag to end
-                    entry_content = para_content[entry_start:]
-
-                # Parse this entry
-                entry = _parse_entry_content(entry_word, entry_content)
-                if entry:
-                    entries.append(entry)
+            # Parse this entry with all its paragraph content
+            entry = _parse_entry_content(entry_word, entry_content)
+            if entry:
+                entries.append(entry)
 
     except Exception as e:
         print(f"Error parsing GCIDE file {gcide_file}: {e}")
